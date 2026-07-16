@@ -1,0 +1,195 @@
+plugins {
+    id "java"
+}
+
+group = "determinationwind.random"
+version = "1.0.0"
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+def mindustryVersion = (findProperty("mindustryVersion") ?: "v159").toString()
+def localMindustryCoreJar = new File(rootDir.parentFile, "Mindustry-master/core/build/libs/core-release.jar")
+def localArcCoreJar = new File(rootDir.parentFile, "Arc/arc-core/build/libs/arc-core-1.0.jar")
+def releaseVersion = (findProperty("releaseVersion") ?: "1.0.0").toString()
+def releaseArtifactName = "Random-${releaseVersion}.jar"
+def outputDir = new File(rootDir.parentFile, "构建/Random")
+def distDir = new File(projectDir, "dist")
+
+repositories {
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
+dependencies {
+    if(localMindustryCoreJar.exists()) {
+        def localClasspath = [localMindustryCoreJar]
+        if(localArcCoreJar.exists()) localClasspath.add(localArcCoreJar)
+        compileOnly files(localClasspath)
+        testImplementation files(localClasspath)
+    } else {
+        compileOnly "com.github.Anuken.Mindustry:core:${mindustryVersion}"
+        testImplementation "com.github.Anuken.Mindustry:core:${mindustryVersion}"
+    }
+}
+
+sourceSets {
+    main {
+        java.srcDirs = ["src/main/java"]
+        resources.srcDirs = ["src/main/resources"]
+    }
+    test {
+        java.srcDirs = ["src/test/java"]
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(17)
+}
+
+tasks.named("test") {
+    failOnNoDiscoveredTests = false
+    dependsOn tasks.named("randomAlgorithmTest")
+}
+
+tasks.register("randomAlgorithmTest", JavaExec) {
+    group = "verification"
+    description = "Runs Random's deterministic permutation, cache and texture-fit checks."
+    dependsOn tasks.named("testClasses")
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "random.RandomAlgorithmTest"
+}
+
+def isWindows = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("windows")
+
+def findD8 = {
+    def explicit = System.getenv("D8_PATH")
+    if(explicit) {
+        def file = new File(explicit)
+        if(file.exists()) return file
+    }
+
+    def sdkRoot = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
+    if(sdkRoot) {
+        def buildTools = new File(sdkRoot, "build-tools")
+        if(buildTools.isDirectory()) {
+            def name = isWindows ? "d8.bat" : "d8"
+            def candidates = (buildTools.listFiles() ?: [])
+                .findAll { it.isDirectory() }
+                .sort { a, b -> b.name <=> a.name }
+            for(def dir : candidates) {
+                def executable = new File(dir, name)
+                if(executable.exists()) return executable
+            }
+        }
+    }
+
+    if(isWindows) {
+        def workspace = rootDir.parentFile
+        def candidates = (workspace.listFiles() ?: [])
+            .findAll { it.isDirectory() && it.name.startsWith("commandlinetools-win-") }
+            .sort { a, b -> b.name <=> a.name }
+        for(def dir : candidates) {
+            def executable = new File(dir, "cmdline-tools/bin/d8.bat")
+            if(executable.exists()) return executable
+        }
+    }
+
+    return null
+}
+
+def findAndroidJar = {
+    def sdkRoot = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
+    if(sdkRoot) {
+        def platforms = new File(sdkRoot, "platforms")
+        def candidates = (platforms.listFiles() ?: [])
+            .findAll { it.isDirectory() && new File(it, "android.jar").exists() }
+            .sort { a, b -> b.name <=> a.name }
+        if(!candidates.isEmpty()) return new File(candidates.first(), "android.jar")
+    }
+
+    def workspaceCandidates = [
+        new File(rootDir.parentFile, "Arc/backends/backend-android/libs/android.jar"),
+        new File(rootDir.parentFile, "MindustryX-main/Arc/backends/backend-android/libs/android.jar")
+    ]
+    return workspaceCandidates.find { it.exists() }
+}
+
+def androidDexOutDir = layout.buildDirectory.dir("d8").get().asFile
+
+tasks.register("d8InputJar", Jar) {
+    group = "build"
+    description = "Builds the bytecode input consumed by Android D8."
+    dependsOn tasks.named("classes")
+    archiveFileName = "Random-d8-input.jar"
+    destinationDirectory = layout.buildDirectory.dir("d8-input")
+    from(sourceSets.main.output)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register("dexAndroid", Exec) {
+    group = "build"
+    description = "Converts Random classes to Android classes.dex."
+    dependsOn tasks.named("d8InputJar")
+
+    doFirst {
+        def d8 = findD8()
+        if(d8 == null) throw new GradleException("D8 not found. Set D8_PATH, ANDROID_SDK_ROOT, or ANDROID_HOME.")
+
+        delete(androidDexOutDir)
+        androidDexOutDir.mkdirs()
+
+        def inputJar = tasks.named("d8InputJar").get().archiveFile.get().asFile
+        commandLine d8.absolutePath
+        args "--min-api", "14", "--release", "--output", androidDexOutDir.absolutePath
+
+        def androidJar = findAndroidJar()
+        if(androidJar != null) args "--lib", androidJar.absolutePath
+        configurations.compileClasspath.files.each { library -> args "--lib", library.absolutePath }
+        args inputJar.absolutePath
+    }
+}
+
+tasks.register("jarMerged", Jar) {
+    group = "build"
+    description = "Packages the desktop and Android Random release artifact."
+    dependsOn tasks.named("classes")
+    dependsOn tasks.named("dexAndroid")
+    archiveFileName = releaseArtifactName
+    destinationDirectory = layout.buildDirectory.dir("libs")
+    from(sourceSets.main.output)
+    from(androidDexOutDir) { include "classes.dex" }
+    from(projectDir) { include "mod.json" }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register("deploy", Copy) {
+    group = "build"
+    description = "Copies the Random release artifact to 构建/Random."
+    dependsOn tasks.named("jarMerged")
+    from(tasks.named("jarMerged").flatMap { it.archiveFile })
+    into(outputDir)
+    rename { releaseArtifactName }
+    doNotTrackState("The workspace artifact directory is an explicit local delivery target.")
+}
+
+tasks.register("copyReleaseToDist", Copy) {
+    group = "build"
+    description = "Copies the Random release artifact to dist/."
+    dependsOn tasks.named("jarMerged")
+    from(tasks.named("jarMerged").flatMap { it.archiveFile })
+    into(distDir)
+    rename { releaseArtifactName }
+    doNotTrackState("The dist directory is an explicit release delivery target.")
+}
+
+tasks.register("releaseBuild") {
+    group = "build"
+    description = "Runs tests and produces the local release artifacts."
+    dependsOn tasks.named("test")
+    dependsOn tasks.named("deploy")
+    dependsOn tasks.named("copyReleaseToDist")
+}

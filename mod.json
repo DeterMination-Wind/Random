@@ -1,0 +1,11 @@
+{
+  "name": "Random",
+  "displayName": "Random",
+  "author": "DeterMination-Wind",
+  "description": "Client-side random text and texture presentation for Mindustry.",
+  "version": "1.0.0",
+  "minGameVersion": 159,
+  "hidden": true,
+  "java": true,
+  "main": "random.RandomMod"
+}
