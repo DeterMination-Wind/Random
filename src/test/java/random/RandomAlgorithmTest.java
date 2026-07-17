@@ -15,6 +15,7 @@ public final class RandomAlgorithmTest{
         permutationAvoidsFixedPointsWhenPossible();
         cacheKeyAndDigestAreStableAndSensitive();
         textSanitizationPreservesFormatting();
+        instructionalTextSelectionIsScopedAndFormatSafe();
         textureFitIsAspectPreserving();
         System.out.println("Random algorithm tests passed.");
     }
@@ -42,9 +43,9 @@ public final class RandomAlgorithmTest{
 
     private static void cacheKeyAndDigestAreStableAndSensitive(){
         RandomStateStore store = null;
-        String first = "algorithm=1|identity=save-a|content=content-a|text=true|texture=false";
-        String same = "algorithm=1|identity=save-a|content=content-a|text=true|texture=false";
-        String changed = "algorithm=1|identity=save-a|content=content-b|text=true|texture=false";
+        String first = "algorithm=2|identity=save-a|content=content-a|text=true|texture=false";
+        String same = "algorithm=2|identity=save-a|content=content-a|text=true|texture=false";
+        String changed = "algorithm=2|identity=save-a|content=content-b|text=true|texture=false";
         check(RandomPermutationController.digest(first).equals(RandomPermutationController.digest(same)), "digest is not stable");
         check(!RandomPermutationController.digest(first).equals(RandomPermutationController.digest(changed)), "content change did not invalidate digest");
         check(store == null, "test guard");
@@ -53,6 +54,19 @@ public final class RandomAlgorithmTest{
     private static void textSanitizationPreservesFormatting(){
         String value = RandomTextResolver.sanitize("[accent]text[]\n\t\u0000icon");
         check(value.equals("[accent]text[]\n\ticon"), "text sanitization changed legal formatting");
+    }
+
+    private static void instructionalTextSelectionIsScopedAndFormatSafe(){
+        check(RandomInstructionTextController.isInstructionText("lst.drawflush", "Flush queued Draw operations."),
+            "logic instruction tooltip was not selected");
+        check(RandomInstructionTextController.isInstructionText("hint.zoom", "Scroll to zoom."),
+            "tutorial hint was not selected");
+        check(!RandomInstructionTextController.isInstructionText("settings.graphics", "Graphics"),
+            "normal UI text was selected");
+        check(!RandomInstructionTextController.isInstructionText("hint.dynamic", "Wave {0}"),
+            "formatted instruction text was selected");
+        check(RandomInstructionTextController.hasFormatArguments("Value {0,number}"),
+            "formatted argument was not detected");
     }
 
     private static void textureFitIsAspectPreserving(){
