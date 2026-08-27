@@ -33,3 +33,7 @@ Enable the randomization options, then enter a world. When bundled in Neon, the 
 ~~~powershell
 .\gradlew.bat releaseBuild
 ~~~
+
+## 文档
+
+分类文档（架构 / 开发 / 发布 / 测试 / 术语表）见 [docs/README.md](docs/README.md)。
