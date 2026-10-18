@@ -16,6 +16,7 @@ public final class RandomAlgorithmTest{
         cacheKeyAndDigestAreStableAndSensitive();
         textSanitizationPreservesFormatting();
         instructionalTextSelectionIsScopedAndFormatSafe();
+        formatArgumentPatternIsAndroidSafe();
         textureFitIsAspectPreserving();
         System.out.println("Random algorithm tests passed.");
     }
@@ -67,6 +68,48 @@ public final class RandomAlgorithmTest{
             "formatted instruction text was selected");
         check(RandomInstructionTextController.hasFormatArguments("Value {0,number}"),
             "formatted argument was not detected");
+    }
+
+    private static void formatArgumentPatternIsAndroidSafe(){
+        String pattern = RandomInstructionTextController.FORMAT_ARGUMENT.pattern();
+        check(!hasAndroidUnsafeBraces(pattern),
+            "format argument pattern uses braces Android ICU rejects: " + pattern);
+        check(RandomInstructionTextController.hasFormatArguments("Value {0}"),
+            "simple format argument was not detected");
+        check(RandomInstructionTextController.hasFormatArguments("Value {0,number}"),
+            "patterned format argument was not detected");
+        check(!RandomInstructionTextController.hasFormatArguments("Value without arguments"),
+            "plain text was treated as a format argument");
+    }
+
+    /**
+     * Mirrors Android's ICU regex parser for braces: unlike desktop java.util.regex, ICU only accepts
+     * an unescaped brace as part of a well-formed quantifier ({n}, {n,} or {n,m}); any other unescaped
+     * '{' or '}' outside a character class is a PatternSyntaxException there.
+     */
+    private static boolean hasAndroidUnsafeBraces(String pattern){
+        boolean inClass = false;
+        for(int i = 0; i < pattern.length(); i++){
+            char c = pattern.charAt(i);
+            if(c == '\\'){
+                i++;
+            }else if(inClass){
+                if(c == ']') inClass = false;
+            }else if(c == '['){
+                inClass = true;
+            }else if(c == '{'){
+                int j = i + 1;
+                while(j < pattern.length() && Character.isDigit(pattern.charAt(j))) j++;
+                if(j == i + 1) return true;
+                if(j < pattern.length() && pattern.charAt(j) == ',') j++;
+                while(j < pattern.length() && Character.isDigit(pattern.charAt(j))) j++;
+                if(j >= pattern.length() || pattern.charAt(j) != '}') return true;
+                i = j;
+            }else if(c == '}'){
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void textureFitIsAspectPreserving(){

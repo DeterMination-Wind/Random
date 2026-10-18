@@ -48,6 +48,7 @@ dist/                         本地发布产物副本（gitignore）
 
 - 只改显示层：`fullIcon` / `uiIcon` / `region` / 文本 getter；不触碰玩法字段。一切 World 内修改必须在 `ResetEvent` 完整还原。
 - 随机必须确定可复现：一律经 `RandomPermutationController`（seed 由 `clientSeed|cacheKey|kind` 派生），不得引入 `new Random()` 裸随机。
+- 正则必须同时兼容桌面 `java.util.regex` 与 Android ICU：字面花括号要转义或放进字符类（ICU 拒绝裸 `}`，曾导致安卓端模组加载崩溃），改动后由 `randomAlgorithmTest` 的括号安全检查钉住。
 - 不与他模组争抢：替换 dialog 前校验原版类型，被占用时降级关闭文本随机化并 `Log.warn`。
 - 玩家可见文案走 bundle，三份语言文件同步，不硬编码。
 - 对游戏内部类的子类扩展必须放在 `mindustry.ui.dialogs` 包下；模组本体只放 `random` 包。

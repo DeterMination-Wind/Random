@@ -8,7 +8,7 @@ Random 有一个小型自动化回归 + 以手测为主的验证方式。
 
 | 任务 | 主类 | 覆盖内容 |
 | --- | --- | --- |
-| `randomAlgorithmTest` | `random.RandomAlgorithmTest` | 置换完整性（无重复/遗漏）、不动点规避（含单元素退化池）、cacheKey/digest 稳定性与敏感性、文本 sanitize 保留格式、说明文案选择范围（前缀 + 格式参数排除）、`fitScale` 等比缩放 |
+| `randomAlgorithmTest` | `random.RandomAlgorithmTest` | 置换完整性（无重复/遗漏）、不动点规避（含单元素退化池）、cacheKey/digest 稳定性与敏感性、文本 sanitize 保留格式、说明文案选择范围（前缀 + 格式参数排除 + Android ICU 括号安全）、`fitScale` 等比缩放 |
 
 ```powershell
 .\gradlew.bat test                # 全部（即该回归）
